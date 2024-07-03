@@ -1,46 +1,52 @@
-const redis = require('redis');
+import { createClient } from 'redis';
 
 class RedisClient {
-  constructor() {
-    this.client = redis.createClient();
+  constructor () {
+    this.client = createClient();
+    this.connected = false;
 
-    this.client.on('error', (error) => {
-      console.error('Redis Client Error:', error);
+    this.client.on('error', (err) => {
+      console.error(`Redis client error: ${err}`);
+    });
+
+    this.client.on('ready', () => {
+      console.log('Redis client connected');
+      this.connected = true;
     });
   }
 
-  isAlive() {
-    return this.client.ready;
+  isAlive () {
+    return this.connected;
   }
 
-  async get(key) {
-    try {
-      const value = await this.client.get(key);
-      return value;
-    } catch (error) {
-      console.error('Error getting value from Redis:', error);
-      return null;
-    }
+  async get (key) {
+    return new Promise((resolve, reject) => {
+      this.client.get(key, (err, value) => {
+        if (err) return reject(err);
+        resolve(value);
+      });
+    });
   }
 
-  async set(key, value, duration) {
-    try {
-      await this.client.setex(key, duration, value);
-    } catch (error) {
-      console.error('Error setting value in Redis:', error);
-    }
+  async set (key, value, duration) {
+    return new Promise((resolve, reject) => {
+      this.client.set(key, value, 'EX', duration, (err, reply) => {
+        if (err) return reject(err);
+        resolve(reply);
+      });
+    });
   }
 
-  async del(key) {
-    try {
-      const deleted = await this.client.del(key);
-      return deleted === 1;
-    } catch (error) {
-      console.error('Error deleting key from Redis:', error);
-      return false;
-    }
+  async del (key) {
+    return new Promise((resolve, reject) => {
+      this.client.del(key, (err, reply) => {
+        if (err) return reject(err);
+        resolve(reply);
+      });
+    });
   }
 }
 
 const redisClient = new RedisClient();
-module.exports = redisClient;
+export default redisClient;
+
