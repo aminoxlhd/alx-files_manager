@@ -1,22 +1,15 @@
-const { hashPassword, createUser } = require('../utils');
-const { ValidationError } = require('express-validator');
+const { getUserByToken } = require('../utils');
 
-exports.postNew = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ error: errors.array()[0].msg });
+exports.getMe = async (req, res) => {
+  const token = req.headers['x-token'];
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { email, password } = req.body;
-
-  const existingUser = await findUserByEmail(email);
-  if (existingUser) {
-    return res.status(400).json({ error: 'Already exist' });
+  const user = await getUserByToken(token);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const hashedPassword = await hashPassword(password);
-
-  const user = await createUser({ email, password: hashedPassword });
-
-  res.status(201).json({ id: user._id, email: user.email });
+  res.status(200).json({ id: user._id, email: user.email });
 };
