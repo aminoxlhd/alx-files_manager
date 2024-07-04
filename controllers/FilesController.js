@@ -1,69 +1,49 @@
 const { ObjectId } = require('mongodb');
-
+const { fs } = require('fs');
+const { promisify } = require('util');
 const {
   getUserByToken,
   findFileById,
-  updateFile
 } = require('../utils');
 
-exports.putPublish = async (req, res) => {
-  const token = req.headers['x-token'];
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+const readFileAsync = promisify(fs.readFile);
 
-  const user = await getUserByToken(token);
-  if (!user) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
+exports.getFile = async (req, res) => {
   const fileId = req.params.id;
   if (!ObjectId.isValid(fileId)) {
     return res.status(400).json({ error: 'Invalid file ID' });
   }
 
   const file = await findFileById(fileId);
-  if (!file || file.userId.toString() !== user._id.toString()) {
+
+  if (!file) {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  const updatedFile = {
-    ...file,
-    isPublic: true,
-  };
+  if (!file.isPublic) {
+    const token = req.headers['x-token'];
+    if (!token) {
+      return res.status(404).json({ error: 'Not found' });
+    }
 
-  await updateFile(updatedFile);
-
-  res.status(200).json(updatedFile);
-};
-
-exports.putUnpublish = async (req, res) => {
-  const token = req.headers['x-token'];
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    const user = await getUserByToken(token);
+    if (!user || user._id.toString() !== file.userId.toString()) {
+      return res.status(404).json({ error: 'Not found' });
+    }
   }
 
-  const user = await getUserByToken(token);
-  if (!user) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (file.type === 'folder') {
+    return res.status(400).json({ error: 'A folder doesn\'t have content' });
   }
 
-  const fileId = req.params.id;
-  if (!ObjectId.isValid(fileId)) {
-    return res.status(400).json({ error: 'Invalid file ID' });
-  }
-
-  const file = await findFileById(fileId);
-  if (!file || file.userId.toString() !== user._id.toString()) {
+  const filePath = file.localPath;
+  if (!filePath || !fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  const updatedFile = {
-    ...file,
-    isPublic: false,
-  };
+  const contentType = mime.lookup(file.name);
+  const fileContent = await readFileAsync(filePath);
 
-  await updateFile(updatedFile);
-
-  res.status(200).json(updatedFile);
+  res.setHeader('Content-Type', contentType);
+  res.send(fileContent);
 };
